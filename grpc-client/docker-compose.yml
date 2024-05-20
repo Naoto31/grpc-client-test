@@ -1,0 +1,24 @@
+version: "3.8"
+
+services:
+  protobuf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/usr/src/app
+    command:
+      [
+        "sh",
+        "-c",
+        "protoc -I=protos protos/echo.proto --js_out=import_style=commonjs,binary:src --grpc-web_out=import_style=typescript,mode=grpcweb:src",
+      ]
+
+  envoy:
+    build:
+      context: .
+      dockerfile: Dockerfile.envoy
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./envoy.yaml:/etc/envoy/envoy.yaml

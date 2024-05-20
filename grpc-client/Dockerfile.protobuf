@@ -1,0 +1,54 @@
+# Dockerfile for Protobuf Generation
+FROM node:14
+
+# Install dependencies
+RUN apt-get update && apt-get install -y \
+    unzip \
+    curl \
+    build-essential \
+    openjdk-11-jdk \
+    git \
+    && apt-get clean
+
+# Install Bazel
+RUN curl -fsSL https://bazel.build/bazel-release.pub.gpg | gpg --dearmor >bazel-archive-keyring.gpg
+RUN mv bazel-archive-keyring.gpg /usr/share/keyrings
+RUN echo "deb [signed-by=/usr/share/keyrings/bazel-archive-keyring.gpg] http://storage.googleapis.com/bazel-apt stable jdk1.8" | tee /etc/apt/sources.list.d/bazel.list
+RUN apt-get update && apt-get install -y bazel
+
+# Clone and build protoc-gen-js
+RUN git clone https://github.com/protocolbuffers/protobuf-javascript.git
+WORKDIR protobuf-javascript
+RUN git checkout v3.21.2
+RUN bazel build //generator:protoc-gen-js
+
+# Copy the built plugin to a directory in PATH
+RUN cp bazel-bin/generator/protoc-gen-js /usr/local/bin/
+
+# Manually install protoc-gen-grpc-web
+RUN curl -L https://github.com/grpc/grpc-web/releases/download/1.5.0/protoc-gen-grpc-web-1.5.0-linux-x86_64 \
+    -o /usr/local/bin/protoc-gen-grpc-web \
+    && chmod +x /usr/local/bin/protoc-gen-grpc-web
+
+# Install protoc
+RUN curl -OL https://github.com/protocolbuffers/protobuf/releases/download/v21.3/protoc-21.3-linux-x86_64.zip \
+    && unzip protoc-21.3-linux-x86_64.zip -d /usr/local \
+    && rm -f protoc-21.3-linux-x86_64.zip
+
+# Set PATH environment variable
+ENV PATH="/usr/local/bin:${PATH}"
+
+# Create app directory
+WORKDIR /usr/src/app
+
+# Copy the current directory contents into the container at /usr/src/app
+COPY . .
+
+# Explicitly copy the protos directory
+COPY protos /usr/src/app/protos
+
+# Install app dependencies
+RUN yarn install
+
+# Generate the protobuf files
+CMD ["sh", "-c", "protoc -I=protos protos/echo.proto --js_out=import_style=commonjs,binary:src --grpc-web_out=import_style=typescript,mode=grpcweb:src"]
